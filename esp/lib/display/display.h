@@ -14,4 +14,9 @@ bool Display_Init(void);
 void Display_Message(const char* msg);
 
 // Update OLED with live telemetry (sensors, walls, etc.)
-void Display_Telemetry(uint16_t wL, uint16_t wF, uint16_t wR, float gyro, int32_t encL, int32_t encR);
+void Display_Telemetry(uint16_t rawL, uint16_t rawF, uint16_t rawR, 
+                       bool wL, bool wF, bool wR, 
+                       float gyro, int32_t encL, int32_t encR);
+
+// Helper function to read all values and update both Serial and OLED
+void Update_UI(void);

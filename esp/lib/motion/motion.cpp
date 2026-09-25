@@ -4,6 +4,7 @@
 #include "../gyro/gyro.h"
 #include "../sensor/sensor_Function.h"
 #include "../comms/comms.h"
+#include "../display/display.h"
 
 void stopMotors() {
     setLeftPwm(0);
@@ -22,10 +23,16 @@ void moveForwardOneCell() {
     int32_t currentTicks = 0;
     
     unsigned long startTime = millis();
+    unsigned long last_ui_update = millis();
 
     // Drive until the average encoder count reaches the target
     // Added a 3-second timeout in case encoders are disconnected or robot is stuck
     while (currentTicks < targetTicks && (millis() - startTime) < 3000) {
+        if (millis() - last_ui_update > 50) {
+            Update_UI();
+            last_ui_update = millis();
+        }
+
         updateEncoders();
         
         int32_t left = getLeftEncCount() * p.enc_L_direction;
@@ -89,10 +96,16 @@ static void turnByAngle(float targetAngleDeg) {
     }
     
     unsigned long startTime = millis();
+    unsigned long last_ui_update = millis();
 
     // Integrate gyro Z over time until we reach the target angle
     // Added a 2-second timeout in case the robot is stuck or held in the air
     while (abs(currentAngle) < abs(targetAngleDeg) && (millis() - startTime) < 2000) {
+        if (millis() - last_ui_update > 50) {
+            Update_UI();
+            last_ui_update = millis();
+        }
+
         unsigned long now = micros();
         float dt = (now - lastTime) / 1000000.0f;
         lastTime = now;

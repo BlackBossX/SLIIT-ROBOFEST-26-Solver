@@ -1,4 +1,8 @@
 #include "display.h"
+#include "sensor_Function.h"
+#include "gyro.h"
+#include "encoder.h"
+#include "comms.h"
 
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 // The pins for I2C are defined by the default Wire library (21, 22 on ESP32)
@@ -38,25 +42,74 @@ void Display_Message(const char* msg) {
     display.display();
 }
 
-void Display_Telemetry(uint16_t wL, uint16_t wF, uint16_t wR, float gyro, int32_t encL, int32_t encR) {
+void Display_Telemetry(uint16_t rawL, uint16_t rawF, uint16_t rawR, 
+                       bool wL, bool wF, bool wR, 
+                       float gyro, int32_t encL, int32_t encR) {
     display.clearDisplay();
+    
+    // --- Graphical Top-Down View ---
+    // Robot center
+    int cx = 64;
+    int cy = 24;
+    
+    // Draw robot (small filled rectangle)
+    display.fillRect(cx - 6, cy - 8, 12, 16, SSD1306_WHITE);
+    // Draw direction indicator (triangle pointing up)
+    display.fillTriangle(cx, cy - 10, cx - 4, cy - 4, cx + 4, cy - 4, SSD1306_BLACK);
+
+    // Draw detected walls (Thick lines)
+    if (wF) display.fillRect(cx - 16, cy - 20, 32, 4, SSD1306_WHITE); // Front Wall
+    if (wL) display.fillRect(cx - 20, cy - 16, 4, 32, SSD1306_WHITE); // Left Wall
+    if (wR) display.fillRect(cx + 16, cy - 16, 4, 32, SSD1306_WHITE); // Right Wall
+
+    // --- Text Distances ---
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0, 0);
     
-    // Draw walls
-    display.print("L:"); display.print(wL == 9999 ? "---" : String(wL)); 
-    display.print(" F:"); display.print(wF == 9999 ? "---" : String(wF));
-    display.print(" R:"); display.println(wR == 9999 ? "---" : String(wR));
+    // Front distance (Top center)
+    display.setCursor(cx - 12, 0);
+    display.print(rawF == 9999 ? "---" : String(rawF));
     
-    display.println();
+    // Left distance (Left side)
+    display.setCursor(0, cy - 4);
+    display.print(rawL == 9999 ? "---" : String(rawL));
     
-    // Draw Gyro
-    display.print("Gyro Z: "); display.print(gyro, 1); display.println(" deg/s");
-    
-    // Draw Encoders
-    display.print("EncL: "); display.println(encL);
-    display.print("EncR: "); display.println(encR);
+    // Right distance (Right side)
+    display.setCursor(cx + 26, cy - 4);
+    display.print(rawR == 9999 ? "---" : String(rawR));
+
+    // --- Bottom Info Section ---
+    display.setCursor(0, 44);
+    display.print("WALLS:");
+    display.print(wL ? " [L]" : "    ");
+    display.print(wF ? " [F]" : "    ");
+    display.print(wR ? " [R]" : "    ");
+
+    display.setCursor(0, 54);
+    display.printf("G:%4.1f E:%ld,%ld", gyro, (long)encL, (long)encR);
 
     display.display();
+}
+
+void Update_UI(void) {
+    RobotParams &p = getParams();
+    int32_t leftTicks = getLeftEncCount() * p.enc_L_direction;
+    int32_t rightTicks = getRightEncCount() * p.enc_R_direction;
+    float gyroZ = getGyroZ();
+    
+    readSensors();
+    bool wFront = isWallFront(p.wall_front_thresh);
+    bool wRight = isWallRight(p.wall_side_thresh);
+    bool wLeft = isWallLeft(p.wall_side_thresh);
+
+    // Serial
+    Serial.printf("[TEL] 90R=%4d 45R=%4d 0R=%4d 0L=%4d 45L=%4d 90L=%4d  encL=%6ld encR=%6ld  GyroZ=%6.1f\r\n",
+                  sensorMM[SENSOR_90R], sensorMM[SENSOR_45R], sensorMM[SENSOR_0R],
+                  sensorMM[SENSOR_0L], sensorMM[SENSOR_45L], sensorMM[SENSOR_90L],
+                  (long)leftTicks, (long)rightTicks, gyroZ);
+
+    // Display
+    uint16_t frontAvg = (sensorMM[SENSOR_0L] == 9999 || sensorMM[SENSOR_0R] == 9999) ? 9999 : (sensorMM[SENSOR_0L] + sensorMM[SENSOR_0R]) / 2;
+    Display_Telemetry(sensorMM[SENSOR_90L], frontAvg, sensorMM[SENSOR_90R],
+                      wLeft, wFront, wRight, gyroZ, leftTicks, rightTicks);
 }
