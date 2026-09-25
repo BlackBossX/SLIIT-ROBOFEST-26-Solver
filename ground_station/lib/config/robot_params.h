@@ -15,18 +15,12 @@
 struct RobotParams {
 
     // =====================================================
-    //  PID — Left Motor
+    //  PID — Motors (Unified)
     // =====================================================
-    float pid_L_kp;     // Proportional gain    (try 1.0–5.0)
-    float pid_L_ki;     // Integral gain        (try 0.0–0.5)
-    float pid_L_kd;     // Derivative gain      (try 0.0–2.0)
+    float pid_M_kp;     // Proportional gain    (try 1.0–5.0)
+    float pid_M_ki;     // Integral gain        (try 0.0–0.5)
+    float pid_M_kd;     // Derivative gain      (try 0.0–2.0)
 
-    // =====================================================
-    //  PID — Right Motor
-    // =====================================================
-    float pid_R_kp;
-    float pid_R_ki;
-    float pid_R_kd;
 
     // =====================================================
     //  PID — Wall-following (side error correction)
@@ -69,12 +63,9 @@ struct RobotParams {
 // has pushed an update yet.
 inline RobotParams defaultParams() {
     RobotParams p;
-    p.pid_L_kp = 2.0f;
-    p.pid_L_ki = 0.0f;
-    p.pid_L_kd = 0.5f;
-    p.pid_R_kp = 2.0f;
-    p.pid_R_ki = 0.0f;
-    p.pid_R_kd = 0.5f;
+    p.pid_M_kp = 2.0f;
+    p.pid_M_ki = 0.0f;
+    p.pid_M_kd = 0.5f;
     p.pid_W_kp = 1.5f;
     p.pid_W_ki = 0.0f;
     p.pid_W_kd = 0.3f;

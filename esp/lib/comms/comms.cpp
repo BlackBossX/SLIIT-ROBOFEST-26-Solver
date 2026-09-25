@@ -66,8 +66,7 @@ RobotParams& getParams(void) {
 void printParams(void) {
     const RobotParams& p = liveParams;
     Serial.println("======= Robot Parameters =======");
-    Serial.printf("  PID Left   Kp=%.3f Ki=%.3f Kd=%.3f\n", p.pid_L_kp, p.pid_L_ki, p.pid_L_kd);
-    Serial.printf("  PID Right  Kp=%.3f Ki=%.3f Kd=%.3f\n", p.pid_R_kp, p.pid_R_ki, p.pid_R_kd);
+    Serial.printf("  PID Motors Kp=%.3f Ki=%.3f Kd=%.3f\n", p.pid_M_kp, p.pid_M_ki, p.pid_M_kd);
     Serial.printf("  PID Wall   Kp=%.3f Ki=%.3f Kd=%.3f\n", p.pid_W_kp, p.pid_W_ki, p.pid_W_kd);
     Serial.printf("  Speed  fwd=%d turn=%d slow=%d\n",       p.speed_fwd, p.speed_turn, p.speed_slow);
     Serial.printf("  Cell   size=%dmm fwd_ticks=%d turn_ticks=%d\n",

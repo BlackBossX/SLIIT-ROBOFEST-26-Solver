@@ -23,6 +23,8 @@
 #include "encoder.h"
 #include "comms.h"
 #include "gyro.h"
+#include "motion.h"
+#include "display.h"
 
 // Built-in LED (GPIO2) — used for status indication
 #define PIN_STATUS_LED   2
@@ -55,14 +57,33 @@ void setup() {
         Serial.println("[BOOT] WARNING: Gyro failed to initialize!");
     }
 
+    // OLED Display
+    if (!Display_Init()) {
+        Serial.println("[BOOT] WARNING: OLED display failed to initialize!");
+    } else {
+        Display_Message("Booting up...");
+    }
+
     // ESP-NOW comms (Ground Station receiver)
     Comms_Init();
 
-    // Print MAC address so Ground Station can target this robot
-    Serial.println("[BOOT] Init complete. Robot ready.");
+    Serial.println("[BOOT] Init complete. Robot ready. Waiting 5 seconds before start...");
     printParams();    // Show starting parameter values
 
-    digitalWrite(PIN_STATUS_LED, LOW);
+    // ---- 5s Start Timer with LED ----
+    for (int i = 0; i < 5; i++) {
+        char buf[32];
+        sprintf(buf, "Starting in %d...", 5 - i);
+        Display_Message(buf);
+
+        digitalWrite(PIN_STATUS_LED, HIGH);
+        delay(500);
+        digitalWrite(PIN_STATUS_LED, LOW);
+        delay(500);
+        Serial.printf("[BOOT] %d...\r\n", 5 - i);
+    }
+    Display_Message("Go!");
+    Serial.println("[BOOT] Go!");
 }
 
 // ================================================================
@@ -105,6 +126,11 @@ void loop() {
         gyroZ
     );
 
+    // ---- Update OLED ----
+    // We pass 90L (Left wall), 0L/0R avg (Front wall), 90R (Right wall) to the display
+    uint16_t frontAvg = (sensorMM[SENSOR_0L] == 9999 || sensorMM[SENSOR_0R] == 9999) ? 9999 : (sensorMM[SENSOR_0L] + sensorMM[SENSOR_0R])/2;
+    Display_Telemetry(sensorMM[SENSOR_90L], frontAvg, sensorMM[SENSOR_90R], gyroZ, leftTicks, rightTicks);
+
     // ---- Wall detection example ----
     bool wFront = isWallFront(p.wall_front_thresh);
     bool wRight = isWallRight(p.wall_side_thresh);
@@ -112,12 +138,34 @@ void loop() {
     Serial.printf("[WALLS] Front=%d Right=%d Left=%d\r\n",
                   wFront, wRight, wLeft);
 
-    // ---- TEST DRIVE: drive forward slowly then stop ----
-    // Remove / replace this block with your maze solver logic
-    setLeftPwm(p.speed_fwd);
-    setRightPwm(p.speed_fwd);
-    delay(500);
-    setLeftPwm(0);
-    setRightPwm(0);
-    delay(500);
+    // ---- TEST MODE TOGGLE ----
+    // Set this to true if you just want to see sensor readings on the screen
+    // without the robot trying to move and block the loop.
+    bool test_sensors_only = false; 
+
+    if (!test_sensors_only) {
+        // ---- MAZE SOLVING: Left-Hand Rule ----
+        // 1. If there is no wall on the left, turn left and step forward
+        if (!wLeft) {
+            turnLeft90();
+            moveForwardOneCell();
+        } 
+        // 2. Else if there is no wall in front, step forward
+        else if (!wFront) {
+            moveForwardOneCell();
+        } 
+        // 3. Else if there is no wall on the right, turn right and step forward
+        else if (!wRight) {
+            turnRight90();
+            moveForwardOneCell();
+        } 
+        // 4. Dead end: Turn around and step forward
+        else {
+            turnAround180();
+            moveForwardOneCell();
+        }
+    }
+    
+    // Brief pause between readings
+    delay(100);
 }

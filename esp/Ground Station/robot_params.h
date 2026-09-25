@@ -15,12 +15,18 @@
 struct RobotParams {
 
     // =====================================================
-    //  PID — Motors (Unified)
+    //  PID — Left Motor
     // =====================================================
-    float pid_M_kp;     // Proportional gain    (try 1.0–5.0)
-    float pid_M_ki;     // Integral gain        (try 0.0–0.5)
-    float pid_M_kd;     // Derivative gain      (try 0.0–2.0)
+    float pid_L_kp;     // Proportional gain    (try 1.0–5.0)
+    float pid_L_ki;     // Integral gain        (try 0.0–0.5)
+    float pid_L_kd;     // Derivative gain      (try 0.0–2.0)
 
+    // =====================================================
+    //  PID — Right Motor
+    // =====================================================
+    float pid_R_kp;
+    float pid_R_ki;
+    float pid_R_kd;
 
     // =====================================================
     //  PID — Wall-following (side error correction)
@@ -56,6 +62,7 @@ struct RobotParams {
     int16_t enc_L_direction;   // +1 or -1 (flip if encoder counts backwards)
     int16_t enc_R_direction;   // +1 or -1
     uint8_t sensor_read_us;    // Delay between sensor reads (µs)
+    uint8_t command_id;        // 0=idle, 1=fwd, 2=back, 3=left90, 4=right90, 5=left45, 6=right45, 7=turn180
 
 };  // sizeof(RobotParams) must be ≤ 250 bytes for ESP-NOW
 
@@ -63,9 +70,12 @@ struct RobotParams {
 // has pushed an update yet.
 inline RobotParams defaultParams() {
     RobotParams p;
-    p.pid_M_kp = 2.0f;
-    p.pid_M_ki = 0.0f;
-    p.pid_M_kd = 0.5f;
+    p.pid_L_kp = 2.0f;
+    p.pid_L_ki = 0.0f;
+    p.pid_L_kd = 0.5f;
+    p.pid_R_kp = 2.0f;
+    p.pid_R_ki = 0.0f;
+    p.pid_R_kd = 0.5f;
     p.pid_W_kp = 1.5f;
     p.pid_W_ki = 0.0f;
     p.pid_W_kd = 0.3f;
@@ -81,5 +91,6 @@ inline RobotParams defaultParams() {
     p.enc_L_direction   = 1;
     p.enc_R_direction   = 1;
     p.sensor_read_us    = 20;
+    p.command_id        = 0;
     return p;
 }
