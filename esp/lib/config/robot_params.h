@@ -57,6 +57,11 @@ struct RobotParams {
     int16_t enc_R_direction;   // +1 or -1
     uint8_t sensor_read_us;    // Delay between sensor reads (µs)
 
+    // =====================================================
+    //  Command ID
+    // =====================================================
+    uint8_t command_id;        // Used for manual remote control from GS
+
 };  // sizeof(RobotParams) must be ≤ 250 bytes for ESP-NOW
 
 // Default values — applied at boot if no Ground Station
@@ -81,5 +86,6 @@ inline RobotParams defaultParams() {
     p.enc_L_direction   = 1;
     p.enc_R_direction   = 1;
     p.sensor_read_us    = 20;
+    p.command_id        = 0;
     return p;
 }

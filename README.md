@@ -1,258 +1,134 @@
-# 🐭 Micromouse — ESP32 Robot + ESP-C3 Ground Station
+# NETProject — Micromouse Solver
 
-A complete firmware for a VL53L0X-based micromouse robot with wireless parameter tuning via an ESP32-C3 ground station.
+A complete ESP32-based Micromouse solving robot and ESP-C3 Ground Station.
 
----
+## 🚀 Features
 
-## 📁 Project Structure
-
-```
-FuturaProject/
-├── esp/                        ← Main robot firmware (ESP32)
-│   ├── platformio.ini
-│   ├── src/
-│   │   └── main.cpp            ← Robot entry point
-│   └── lib/
-│       ├── config/
-│       │   └── robot_params.h  ← Shared tunable parameters struct
-│       ├── sensor/
-│       │   ├── sensor_Function.h
-│       │   └── sensor_Function.cpp   ← VL53L0X ToF sensor driver
-│       ├── encoder/
-│       │   ├── encoder.h
-│       │   └── encoder.cpp           ← Raw PCNT quadrature decoder
-│       ├── pwm/
-│       │   ├── pwm.h
-│       │   └── pwm.cpp               ← TB6612FNG motor driver
-│       └── comms/
-│           ├── comms.h
-│           └── comms.cpp             ← ESP-NOW receiver
-│
-└── ground_station/             ← Ground Station firmware (ESP-C3)
-    ├── platformio.ini
-    ├── lib/config/
-    │   └── robot_params.h      ← Same struct (must stay in sync)
-    └── src/
-        └── main.cpp            ← Web server + ESP-NOW sender
-```
+- **6x VL53L0X ToF Sensors**: High-speed, accurate distance measuring for wall detection and centering.
+- **Hardware Encoders**: Uses ESP32 PCNT hardware to precisely track wheel rotation.
+- **MPU6050 Gyro**: Integrates Z-axis rotation for perfect 90° and 180° turns without relying on wheel slip.
+- **Graphical OLED UI**: Live 128x64 SSD1306 display showing a top-down view of the robot, detected walls, and live telemetry updating at 20fps!
+- **ESP-NOW Ground Station**: A wireless remote-control Web UI hosted on a separate ESP-C3 to tune parameters live and send manual driving commands.
+- **Wall Following**: The robot actively centers itself between walls using a Proportional controller.
+- **Fail-safe Timeouts**: Movement loops have built-in timeouts so the robot won't soft-lock if picked up or stalled.
 
 ---
 
-## ⚡ Pin Assignments
+## ⚡ Pin Assignments (Main ESP32)
 
-### Main ESP32 — Sensors (VL53L0X ToF, I²C)
+### I²C Bus (SDA: 21, SCL: 22)
 
-| Sensor | Direction     | XSHUT GPIO | I²C Address |
-|--------|---------------|-----------|-------------|
-| 0      | 90° Right     | GPIO **13** | `0x30`    |
-| 1      | 45° Right     | GPIO **14** | `0x31`    |
-| 2      | 0° Front-Right| GPIO **25** | `0x32`    |
-| 3      | 0° Front-Left | GPIO **26** | `0x33`    |
-| 4      | 45° Left      | GPIO **27** | `0x34`    |
-| 5      | 90° Left      | GPIO **32** | `0x35`    |
+_Shared by the ToF Sensors, Gyro, and OLED Display._
 
-- **SDA** → GPIO 21  
-- **SCL** → GPIO 22  
-- All sensors share the **same I²C bus**. XSHUT is used to assign unique addresses at boot.
+| Device / Sensor | Direction      | XSHUT GPIO  | I²C Address |
+| --------------- | -------------- | ----------- | ----------- |
+| 0               | 90° Right      | GPIO **13** | `0x30`      |
+| 1               | 45° Right      | GPIO **14** | `0x31`      |
+| 2               | 0° Front-Right | GPIO **25** | `0x32`      |
+| 3               | 0° Front-Left  | GPIO **26** | `0x33`      |
+| 4               | 45° Left       | GPIO **27** | `0x34`      |
+| 5               | 90° Left       | GPIO **32** | `0x35`      |
+| MPU6050 Gyro    | N/A            | N/A         | `0x68`      |
+| SSD1306 OLED    | N/A            | N/A         | `0x3C`      |
 
-### Main ESP32 — Encoders (Hardware PCNT)
+> **Note:** The VL53L0X sensors boot up one by one using their XSHUT pins to assign unique addresses on the shared I²C bus.
 
-| Signal         | GPIO | Notes              |
-|----------------|------|--------------------|
-| Left — Pulse A | **34** | Input-only GPIO  |
-| Left — Ctrl B  | **36** | Input-only GPIO  |
-| Right — Pulse A| **39** | Input-only GPIO  |
-| Right — Ctrl B | **35** | Input-only GPIO  |
+### Encoders (Hardware PCNT)
 
-> GPIO 34/35/36/39 are **input-only** on ESP32 — perfect for encoder inputs (no boot issues).
+| Signal          | GPIO   | Notes           |
+| --------------- | ------ | --------------- |
+| Left — Pulse A  | **34** | Input-only GPIO |
+| Left — Ctrl B   | **36** | Input-only GPIO |
+| Right — Pulse A | **39** | Input-only GPIO |
+| Right — Ctrl B  | **35** | Input-only GPIO |
 
-### Main ESP32 — Motor Driver (TB6612FNG)
+### Motor Driver (TB6612FNG)
 
-| Signal | GPIO | Function             |
-|--------|------|----------------------|
-| PWMA   | **23** | Left motor PWM     |
-| AIN1   | **18** | Left direction bit 1|
-| AIN2   | **19** | Left direction bit 2|
-| PWMB   | **17** | Right motor PWM    |
-| BIN1   | **4**  | Right direction bit 1|
-| BIN2   | **16** | Right direction bit 2|
-
-**TB6612FNG direction truth table:**
-
-| AIN1 | AIN2 | Motor A    |
-|------|------|------------|
-| HIGH | LOW  | Forward    |
-| LOW  | HIGH | Reverse    |
-| LOW  | LOW  | Short Brake|
-
-### Built-in LED
-
-| GPIO | Function |
-|------|----------|
-| **2** | Status LED — ON during boot, flashes on ESP-NOW receive |
+| Signal | GPIO   | Function              |
+| ------ | ------ | --------------------- |
+| PWMA   | **23** | Left motor PWM        |
+| AIN1   | **18** | Left direction bit 1  |
+| AIN2   | **19** | Left direction bit 2  |
+| PWMB   | **17** | Right motor PWM       |
+| BIN1   | **4**  | Right direction bit 1 |
+| BIN2   | **16** | Right direction bit 2 |
 
 ---
 
 ## 🎛️ Tunable Parameters
 
-All parameters live in [`lib/config/robot_params.h`](esp/lib/config/robot_params.h). They can be changed at compile time (defaults) or at runtime from the Ground Station web UI.
+All parameters live in [`esp/lib/config/robot_params.h`](esp/lib/config/robot_params.h). They can be changed at compile time or at runtime from the Ground Station web UI. **Important:** The `robot_params.h` file must be kept identical between the Robot and Ground Station!
 
 ### PID Gains
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `pid_L_kp` | `2.0` | Left motor proportional gain |
-| `pid_L_ki` | `0.0` | Left motor integral gain |
-| `pid_L_kd` | `0.5` | Left motor derivative gain |
-| `pid_R_kp` | `2.0` | Right motor proportional gain |
-| `pid_R_ki` | `0.0` | Right motor integral gain |
-| `pid_R_kd` | `0.5` | Right motor derivative gain |
-| `pid_W_kp` | `1.5` | Wall-following proportional gain |
-| `pid_W_ki` | `0.0` | Wall-following integral gain |
-| `pid_W_kd` | `0.3` | Wall-following derivative gain |
+| Parameter  | Default | Description                      |
+| ---------- | ------- | -------------------------------- |
+| `pid_M_kp` | `2.0`   | Unified Motor proportional gain  |
+| `pid_M_ki` | `0.0`   | Unified Motor integral gain      |
+| `pid_M_kd` | `0.5`   | Unified Motor derivative gain    |
+| `pid_W_kp` | `1.5`   | Wall-following proportional gain |
+| `pid_W_ki` | `0.0`   | Wall-following integral gain     |
+| `pid_W_kd` | `0.3`   | Wall-following derivative gain   |
 
-> **Tuning tip:** Start with `Ki=0, Kd=0`. Increase `Kp` until oscillation, then add `Kd` to dampen.
+### Motor Speeds & Navigation
 
-### Motor Speeds (0 – 1023)
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `speed_fwd`  | `400` | Normal forward speed through a cell |
-| `speed_turn` | `350` | Outer wheel speed during a 90° turn |
-| `speed_slow` | `200` | Slow approach (near front wall) |
-
-### Maze Navigation
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `cell_size_mm` | `180` | Standard micromouse cell = 180 mm |
-| `fwd_ticks`    | `400` | Encoder ticks to travel one full cell |
-| `turn_ticks`   | `220` | Encoder ticks for a 90° in-place turn |
-
-> **Calibrating ticks:** Place robot at cell start, run forward one cell, read encoder count from Serial telemetry, enter that number here.
-
-### Sensor Thresholds (mm)
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `wall_front_thresh` | `80`  | If front sensor < this → wall ahead |
-| `wall_side_thresh`  | `90`  | If side sensor < this → wall on side |
-| `wall_diag_thresh`  | `120` | Diagonal sensor threshold |
-
-> Start conservatively high (120 mm) and reduce until the robot reliably detects walls before crashing.
-
-### Calibration
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `enc_L_direction` | `+1` | Flip to `-1` if left encoder counts backwards |
-| `enc_R_direction` | `+1` | Flip to `-1` if right encoder counts backwards |
-| `sensor_read_us`  | `20` | Delay between consecutive sensor polls (µs) |
+| Parameter           | Default | Description                                   |
+| ------------------- | ------- | --------------------------------------------- |
+| `speed_fwd`         | `400`   | Normal forward speed (0-1023)                 |
+| `speed_turn`        | `350`   | Turn speed (0-1023)                           |
+| `fwd_ticks`         | `400`   | Encoder ticks to travel one full cell (180mm) |
+| `wall_front_thresh` | `80`    | Distance to detect front wall (mm)            |
+| `wall_side_thresh`  | `90`    | Distance to detect side walls (mm)            |
 
 ---
 
 ## 📡 Ground Station Setup
 
-### Step 1 — Get robot MAC address
-Flash and boot the robot. Open Serial monitor (`pio device monitor`). You'll see:
-```
-[COMMS] ESP-NOW ready. MAC: AB:CD:EF:01:23:45
-```
-Copy that MAC address.
+The Ground Station runs on a separate **ESP-C3 Super Mini** and hosts a wireless configuration Web UI.
 
-### Step 2 — Set MAC in ground station firmware
-Open [`ground_station/src/main.cpp`](ground_station/src/main.cpp) and set:
-```cpp
-uint8_t ROBOT_MAC_ADDR[6] = {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45};
-```
-
-### Step 3 — Flash ground station
-```bash
-cd ground_station
-pio run --target upload
-```
-
-### Step 4 — Connect and tune
-1. On your phone or laptop, join Wi-Fi: **`Micromouse-GS`** / password: `micromouse`
-2. Open browser → **`http://192.168.4.1`**
-3. Edit any parameter and click **Send to Robot**
-4. Robot's LED flashes to confirm receipt ✓
-5. Robot Serial prints the received parameter dump
-
-### ESP-NOW Technical Notes
-- No router required — the C3 creates its own AP.
-- Range: ~100 m line-of-sight outdoors, ~30 m indoors.
-- Payload: `sizeof(RobotParams)` ≤ 250 bytes (ESP-NOW limit).
-- If delivery fails, Serial prints `"Delivery FAILED"` — check the robot is powered and in range.
+1. **Get the Robot's MAC**: Flash the robot and open the Serial Monitor. Copy the `MAC` address printed at boot.
+2. **Update the Ground Station**: Open `esp/Ground Station/ground_c3.ino` in Arduino IDE. Set `ROBOT_MAC_ADDR` to the copied MAC.
+3. **Flash the Ground Station**: Upload the code to your ESP-C3.
+4. **Connect**: Join the `Micromouse-GS` Wi-Fi network on your phone/laptop (Password: `micromouse`).
+5. **Tune**: Go to `http://192.168.4.1`. Change values and click "Send to Robot"!
 
 ---
 
-## 🔨 Build & Flash
+## 📺 OLED & Serial Telemetry
 
-### Robot (ESP32)
-```bash
-cd esp
-pio run                      # Build only
-pio run --target upload      # Flash
-pio device monitor           # Open Serial monitor (115200 baud)
-```
+While the robot runs, both the OLED screen and Serial Monitor update at high speed (20 FPS).
 
-### Ground Station (ESP-C3)
-```bash
-cd ground_station
-pio run --target upload
-pio device monitor
-```
+### Serial Output:
 
-> **ESP-C3 upload tip:** If upload fails, hold **BOOT** button, press **RST**, release **BOOT**, then retry.
-
----
-
-## 🔎 Serial Telemetry (Robot)
-
-Every loop the robot prints:
-```
-[TEL] 90R= 250 45R= 180 0R=  72 0L=  68 45L= 195 90L= 260  encL=  1240 encR=  1238
+```text
+[TEL] 90R= 250 45R= 180 0R=  72 0L=  68 45L= 195 90L= 260  encL=  1240 encR=  1238 GyroZ=0.0
 [WALLS] Front=1 Right=0 Left=0
 ```
 
-| Field | Meaning |
-|-------|---------|
-| `90R/45R/0R/0L/45L/90L` | Distance in mm from each ToF sensor (`9999` = no reading) |
-| `encL / encR`            | Cumulative left/right encoder tick count |
-| `Front/Right/Left`       | `1` if a wall is detected on that side |
+_(Note: `9999` means "Out of Range" / "No Wall" - this is normal behavior for open space!)_
+
+### OLED Display:
+
+The OLED shows a **Graphical Top-Down View** of the robot (a small square). When the sensors detect walls, thick white lines will appear around the robot on the screen to show exactly what it "sees" in real time!
 
 ---
 
-## ⚙️ Architecture Decisions
+## 🛠️ Testing & Debugging Mode
 
-| Choice | Reason |
-|--------|--------|
-| **Raw PCNT** instead of ESP32Encoder library | Eliminates external dependency; uses hardware ISR overflow for 32-bit counting |
-| **VL53L0X** over analog IR | ToF sensors give absolute mm distance, immune to ambient light and surface color |
-| **XSHUT boot sequence** | All 6 VL53L0Xs share one I²C bus — XSHUT assigns unique addresses without a multiplexer |
-| **TB6612FNG short-brake** (`AIN1=L, AIN2=L`) | Safest stop mode — back-EMF is clamped, motor decelerates quickly |
-| **ESP-NOW broadcast** | No router, no IP config — works in a competition hall |
-| **AsyncWebServer** | Non-blocking HTTP on single-core C3 — loop() stays free |
+If you want to debug your sensors by moving your hand around the robot _without_ the motors spinning up and causing it to drive off the table:
+
+1. Open `esp/src/main.cpp`
+2. Find `bool test_sensors_only = false;` (around line 138)
+3. Change it to `true` and upload!
 
 ---
 
-## 🗺️ What to Build Next
+## 📋 Dependency List (Robot)
 
-1. **PID speed controller** — use `getLeftEncCount()` / `getRightEncCount()` as feedback
-2. **Wall-following** — use `sensorMM[SENSOR_90R]` vs `sensorMM[SENSOR_90L]` as error input to `pid_W_*`
-3. **Maze solver** — implement Flood-Fill using the wall detection helpers
-4. **Telemetry back to GS** — send `sensorMM[]` + encoder counts from robot to GS via ESP-NOW reply
-
----
-
-## 📋 Dependency List
-
-| Project | Library | Version |
-|---------|---------|---------|
-| esp (robot) | `pololu/VL53L0X` | ^1.3.1 |
-| ground_station | `ESP Async WebServer` | latest |
-| ground_station | `AsyncTCP` | latest |
-| ground_station | `ArduinoJson` | ^6 |
-
-All others use ESP-IDF drivers built into the `espressif32` platform (PCNT, esp_now, WiFi) — no extra installs needed.
+| Library                            | Version  | Purpose      |
+| ---------------------------------- | -------- | ------------ |
+| `pololu/VL53L0X`                   | ^1.3.1   | ToF Sensors  |
+| `adafruit/Adafruit MPU6050`        | ^2.2.6   | Gyro         |
+| `adafruit/Adafruit Unified Sensor` | ^1.1.14  | Gyro         |
+| `adafruit/Adafruit SSD1306`        | ^2.5.11  | OLED Display |
+| `adafruit/Adafruit GFX Library`    | ^1.11.10 | OLED Drawing |

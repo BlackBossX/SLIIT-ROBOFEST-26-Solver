@@ -123,17 +123,10 @@ const char HTML_PAGE[] PROGMEM = R"rawhtml(
 <div class="grid">
 
   <div class="card">
-    <h2>PID — Left Motor <span class="tag">Motor A</span></h2>
-    <div class="row"><label>Kp</label><input type="number" id="pid_L_kp" step="0.01" value="2.00"></div>
-    <div class="row"><label>Ki</label><input type="number" id="pid_L_ki" step="0.001" value="0.000"></div>
-    <div class="row"><label>Kd</label><input type="number" id="pid_L_kd" step="0.01" value="0.50"></div>
-  </div>
-
-  <div class="card">
-    <h2>PID — Right Motor <span class="tag">Motor B</span></h2>
-    <div class="row"><label>Kp</label><input type="number" id="pid_R_kp" step="0.01" value="2.00"></div>
-    <div class="row"><label>Ki</label><input type="number" id="pid_R_ki" step="0.001" value="0.000"></div>
-    <div class="row"><label>Kd</label><input type="number" id="pid_R_kd" step="0.01" value="0.50"></div>
+    <h2>PID — Motors <span class="tag">Unified</span></h2>
+    <div class="row"><label>Kp</label><input type="number" id="pid_M_kp" step="0.01" value="2.00"></div>
+    <div class="row"><label>Ki</label><input type="number" id="pid_M_ki" step="0.001" value="0.000"></div>
+    <div class="row"><label>Kd</label><input type="number" id="pid_M_kd" step="0.01" value="0.50"></div>
   </div>
 
   <div class="card">
@@ -196,8 +189,7 @@ const char HTML_PAGE[] PROGMEM = R"rawhtml(
 
 <script>
 const defaults = {
-  pid_L_kp:2.0, pid_L_ki:0.0, pid_L_kd:0.5,
-  pid_R_kp:2.0, pid_R_ki:0.0, pid_R_kd:0.5,
+  pid_M_kp:2.0, pid_M_ki:0.0, pid_M_kd:0.5,
   pid_W_kp:1.5, pid_W_ki:0.0, pid_W_kd:0.3,
   speed_fwd:400, speed_turn:350, speed_slow:200,
   cell_size_mm:180, fwd_ticks:400, turn_ticks:220,
@@ -237,8 +229,7 @@ async function sendCommand(cmd_id){
 
 async function sendParams(){
   const ids=[
-    'pid_L_kp','pid_L_ki','pid_L_kd',
-    'pid_R_kp','pid_R_ki','pid_R_kd',
+    'pid_M_kp','pid_M_ki','pid_M_kd',
     'pid_W_kp','pid_W_ki','pid_W_kd',
     'speed_fwd','speed_turn','speed_slow',
     'cell_size_mm','fwd_ticks','turn_ticks',
@@ -292,12 +283,9 @@ void handleSend() {
     }
 
     // Update only fields present in the JSON (others keep current value)
-    currentParams.pid_L_kp = doc["pid_L_kp"] | currentParams.pid_L_kp;
-    currentParams.pid_L_ki = doc["pid_L_ki"] | currentParams.pid_L_ki;
-    currentParams.pid_L_kd = doc["pid_L_kd"] | currentParams.pid_L_kd;
-    currentParams.pid_R_kp = doc["pid_R_kp"] | currentParams.pid_R_kp;
-    currentParams.pid_R_ki = doc["pid_R_ki"] | currentParams.pid_R_ki;
-    currentParams.pid_R_kd = doc["pid_R_kd"] | currentParams.pid_R_kd;
+    currentParams.pid_M_kp = doc["pid_M_kp"] | currentParams.pid_M_kp;
+    currentParams.pid_M_ki = doc["pid_M_ki"] | currentParams.pid_M_ki;
+    currentParams.pid_M_kd = doc["pid_M_kd"] | currentParams.pid_M_kd;
     currentParams.pid_W_kp = doc["pid_W_kp"] | currentParams.pid_W_kp;
     currentParams.pid_W_ki = doc["pid_W_ki"] | currentParams.pid_W_ki;
     currentParams.pid_W_kd = doc["pid_W_kd"] | currentParams.pid_W_kd;
@@ -318,9 +306,9 @@ void handleSend() {
     sendParams();
     server.send(200, "text/plain", "OK");
 
-    Serial.printf("[GS] Params sent | cmd=%d | PID_L: %.2f/%.3f/%.2f | spd_fwd: %d\n",
+    Serial.printf("[GS] Params sent | cmd=%d | PID_M: %.2f/%.3f/%.2f | spd_fwd: %d\n",
         currentParams.command_id,
-        currentParams.pid_L_kp, currentParams.pid_L_ki, currentParams.pid_L_kd,
+        currentParams.pid_M_kp, currentParams.pid_M_ki, currentParams.pid_M_kd,
         currentParams.speed_fwd);
 }
 
