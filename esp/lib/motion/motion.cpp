@@ -87,13 +87,13 @@ static void turnByAngle(float targetAngleDeg) {
     // Determine direction
     int16_t turnSpeed = p.speed_turn;
     if (targetAngleDeg < 0) {
-        // Turn Right
-        setLeftPwm(turnSpeed);
-        setRightPwm(-turnSpeed);
-    } else {
-        // Turn Left
+        // Turn Right (Physically inverted motors)
         setLeftPwm(-turnSpeed);
         setRightPwm(turnSpeed);
+    } else {
+        // Turn Left (Physically inverted motors)
+        setLeftPwm(turnSpeed);
+        setRightPwm(-turnSpeed);
     }
     
     unsigned long startTime = millis();

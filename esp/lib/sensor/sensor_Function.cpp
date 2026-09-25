@@ -58,6 +58,12 @@ bool Sensor_Configuration(void) {
 
         // Use high-speed continuous mode (reduces per-reading overhead)
         sensors[i].setMeasurementTimingBudget(20000); // 20ms budget
+        
+        // **NOISE FILTERING**: Increase the minimum signal rate to ignore weak "ghost" reflections 
+        // from the cover glass (which cause false 40-50mm readings in empty space). 
+        // Default is 0.25 MCPS, we increase it to 0.50 MCPS.
+        sensors[i].setSignalRateLimit(0.50);
+
         sensors[i].startContinuous();
         
         sensors[i].setTimeout(SENSOR_TIMEOUT_MS); // Restore short timeout for continuous reads
@@ -82,7 +88,13 @@ void readSensors(void) {
         if (sensors[i].timeoutOccurred() || raw > SENSOR_MAX_MM) {
             sensorMM[i] = SENSOR_INVALID;
         } else {
-            sensorMM[i] = raw;
+            // Apply Exponential Moving Average (EMA) to smooth out sudden noise spikes
+            if (sensorMM[i] == SENSOR_INVALID) {
+                sensorMM[i] = raw; // First valid reading
+            } else {
+                // 75% old reading, 25% new reading (Smooths out sudden 40mm jumps)
+                sensorMM[i] = (sensorMM[i] * 3 + raw) / 4;
+            }
         }
     }
 }
@@ -99,8 +111,8 @@ uint16_t getSensor(uint8_t idx) {
 //  Wall detection helpers (used by maze solver)
 // =========================================================
 bool isWallFront(uint16_t threshold_mm) {
-    // Wall in front if BOTH front sensors see something
-    return (sensorMM[SENSOR_0R] < threshold_mm) ||
+    // Require BOTH front sensors to see the wall to reject single-sensor noise
+    return (sensorMM[SENSOR_0R] < threshold_mm) &&
            (sensorMM[SENSOR_0L] < threshold_mm);
 }
 
