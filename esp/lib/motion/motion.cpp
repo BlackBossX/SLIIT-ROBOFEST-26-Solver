@@ -49,15 +49,15 @@ void moveForwardOneCell() {
         if (wallL && wallR) {
             // Both walls present: Keep centered between them
             float wallError = (float)sensorMM[SENSOR_90L] - (float)sensorMM[SENSOR_90R];
-            correction -= wallError * p.pid_W_kp;
+            correction += wallError * p.pid_W_kp;
         } else if (wallL) {
             // Only left wall: Follow left wall at a target distance of 45mm
             float wallError = (float)sensorMM[SENSOR_90L] - 45.0f;
-            correction -= wallError * p.pid_W_kp;
+            correction += wallError * p.pid_W_kp;
         } else if (wallR) {
             // Only right wall: Follow right wall at a target distance of 45mm
             float wallError = 45.0f - (float)sensorMM[SENSOR_90R];
-            correction -= wallError * p.pid_W_kp;
+            correction += wallError * p.pid_W_kp;
         }
         
         // Apply correction to base forward speed
@@ -127,6 +127,22 @@ void turnRight90() {
     turnByAngle(-85.0);
 }
 
+void turnLeft45() {
+    turnByAngle(45.0);
+}
+
+void turnRight45() {
+    turnByAngle(-45.0);
+}
+
 void turnAround180() {
     turnByAngle(175.0);
+}
+
+void moveBackwardOneCell() {
+    RobotParams& p = getParams();
+    setLeftPwm(-p.speed_fwd);
+    setRightPwm(-p.speed_fwd);
+    delay(500); // Simple time-based reverse
+    stopMotors();
 }

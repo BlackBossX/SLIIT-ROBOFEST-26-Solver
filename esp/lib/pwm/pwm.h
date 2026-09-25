@@ -22,12 +22,12 @@
 // =========================================================
 
 // Pin assignments
-#define PIN_PWMA   23
-#define PIN_AIN1   18
-#define PIN_AIN2   19
-#define PIN_PWMB   17
-#define PIN_BIN1    4
-#define PIN_BIN2   16
+#define PIN_PWMA   17
+#define PIN_AIN1    4
+#define PIN_AIN2   16
+#define PIN_PWMB   23
+#define PIN_BIN1   18
+#define PIN_BIN2   19
 
 // LEDC channels (ESP32 hardware PWM)
 #define LEDC_CH_PWMA   0

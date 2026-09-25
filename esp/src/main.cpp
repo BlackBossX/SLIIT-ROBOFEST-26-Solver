@@ -89,9 +89,9 @@ void setup() {
   Serial.println("[BOOT] Go!");
 }
 
-// ================================================================
-//  loop() — main control loop
-// ================================================================
+// Global flag for autonomous maze solving
+bool autonomous_mode = false;
+
 void loop() {
   // ---- Pull latest tunable parameters ----
   RobotParams &p = getParams();
@@ -125,7 +125,6 @@ void loop() {
   bool wFront = isWallFront(p.wall_front_thresh);
   bool wRight = isWallRight(p.wall_side_thresh);
   bool wLeft = isWallLeft(p.wall_side_thresh);
-  Serial.printf("[WALLS] Front=%d Right=%d Left=%d\r\n", wFront, wRight, wLeft);
 
   // ---- Update OLED ----
   // We pass 90L (Left), 0L/0R avg (Front), 90R (Right) raw distances, plus wall
@@ -138,12 +137,30 @@ void loop() {
   Display_Telemetry(sensorMM[SENSOR_90L], frontAvg, sensorMM[SENSOR_90R], wLeft,
                     wFront, wRight, gyroZ, leftTicks, rightTicks);
 
-  // ---- TEST MODE TOGGLE ----
-  // Set this to true if you just want to see sensor readings on the screen
-  // without the robot trying to move and block the loop.
-  bool test_sensors_only = false;
-
-  if (!test_sensors_only) {
+  // ---- MANUAL COMMANDS / MAZE SOLVING ----
+  if (p.command_id != 0) {
+    Serial.printf("[MAIN] Executing manual command: %d\r\n", p.command_id);
+    switch (p.command_id) {
+      case 1: moveForwardOneCell(); break;
+      case 2: moveBackwardOneCell(); break;
+      case 3: turnLeft90(); break;
+      case 4: turnRight90(); break;
+      case 5: turnLeft45(); break;
+      case 6: turnRight45(); break;
+      case 7: turnAround180(); break;
+      case 8: // STOP
+        stopMotors(); 
+        autonomous_mode = false; 
+        Serial.println("[MAIN] Autonomous mode DISABLED.");
+        break;
+      case 9: // START
+        autonomous_mode = true; 
+        Serial.println("[MAIN] Autonomous mode ENABLED.");
+        break;
+    }
+    p.command_id = 0; // Clear it so it only executes once
+  } 
+  else if (autonomous_mode) {
     // ---- MAZE SOLVING: Left-Hand Rule ----
     // 1. If there is no wall on the left, turn left and step forward
     if (!wLeft) {

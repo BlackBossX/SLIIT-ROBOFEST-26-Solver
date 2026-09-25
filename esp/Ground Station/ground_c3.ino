@@ -167,6 +167,8 @@ const char HTML_PAGE[] PROGMEM = R"rawhtml(
   <div class="card">
     <h2>Manual Commands</h2>
     <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px">
+      <button class="cmd-btn" type="button" onclick="sendCommand(9)" style="border-color:var(--green);color:var(--green)">▶ Start Auto</button>
+      <button class="cmd-btn" type="button" onclick="sendCommand(8)" style="border-color:var(--danger);color:var(--danger)">■ Stop Auto</button>
       <button class="cmd-btn" type="button" onclick="sendCommand(1)">▲ Forward</button>
       <button class="cmd-btn" type="button" onclick="sendCommand(2)">▼ Backward</button>
       <button class="cmd-btn" type="button" onclick="sendCommand(3)">↺ Turn 90° Left</button>
@@ -174,7 +176,6 @@ const char HTML_PAGE[] PROGMEM = R"rawhtml(
       <button class="cmd-btn" type="button" onclick="sendCommand(5)">↺ Turn 45° Left</button>
       <button class="cmd-btn" type="button" onclick="sendCommand(6)">↻ Turn 45° Right</button>
       <button class="cmd-btn" type="button" onclick="sendCommand(7)">↕ Turn 180°</button>
-      <button class="cmd-btn" type="button" onclick="sendCommand(8)" style="border-color:var(--danger);color:var(--danger)">■ Stop</button>
     </div>
   </div>
 
