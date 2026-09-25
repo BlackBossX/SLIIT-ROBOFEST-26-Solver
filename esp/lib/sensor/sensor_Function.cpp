@@ -5,6 +5,8 @@
 // =========================================================
 static VL53L0X sensors[NUM_SENSORS];
 
+static bool sensorActive[NUM_SENSORS] = {false, false, false, false, false, false};
+
 // =========================================================
 //  Global readings (mm). 9999 = invalid / no echo.
 // =========================================================
@@ -43,19 +45,22 @@ bool Sensor_Configuration(void) {
         digitalWrite(XSHUT_PINS[i], HIGH);
         delay(10);  // Boot time
 
-        sensors[i].setTimeout(SENSOR_TIMEOUT_MS);
+        sensors[i].setTimeout(500); // Increased timeout for init
         if (!sensors[i].init()) {
             Serial.printf("[SENSOR] ERROR: Sensor %d (XSHUT GPIO%d) failed to init!\n",
                           i, XSHUT_PINS[i]);
             ok = false;
             continue;
         }
+        sensorActive[i] = true;
         // Assign unique address
         sensors[i].setAddress(SENSOR_ADDRS[i]);
 
         // Use high-speed continuous mode (reduces per-reading overhead)
         sensors[i].setMeasurementTimingBudget(20000); // 20ms budget
         sensors[i].startContinuous();
+        
+        sensors[i].setTimeout(SENSOR_TIMEOUT_MS); // Restore short timeout for continuous reads
 
         Serial.printf("[SENSOR] Sensor %d OK  XSHUT=GPIO%d  addr=0x%02X\n",
                       i, XSHUT_PINS[i], SENSOR_ADDRS[i]);
@@ -69,6 +74,10 @@ bool Sensor_Configuration(void) {
 // =========================================================
 void readSensors(void) {
     for (uint8_t i = 0; i < NUM_SENSORS; i++) {
+        if (!sensorActive[i]) {
+            sensorMM[i] = SENSOR_INVALID;
+            continue;
+        }
         uint16_t raw = sensors[i].readRangeContinuousMillimeters();
         if (sensors[i].timeoutOccurred() || raw > SENSOR_MAX_MM) {
             sensorMM[i] = SENSOR_INVALID;
