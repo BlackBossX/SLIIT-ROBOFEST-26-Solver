@@ -91,6 +91,8 @@ void setup() {
 
 // Global flag for autonomous maze solving
 bool autonomous_mode = false;
+// Global cell counter
+uint16_t cells_driven = 0;
 
 void loop() {
   // ---- Pull latest tunable parameters ----
@@ -135,14 +137,14 @@ void loop() {
           : (sensorMM[SENSOR_0L] + sensorMM[SENSOR_0R]) / 2;
 
   Display_Telemetry(sensorMM[SENSOR_90L], frontAvg, sensorMM[SENSOR_90R], wLeft,
-                    wFront, wRight, gyroZ, leftTicks, rightTicks);
+                    wFront, wRight, gyroZ, leftTicks, rightTicks, cells_driven);
 
   // ---- MANUAL COMMANDS / MAZE SOLVING ----
   if (p.command_id != 0) {
     Serial.printf("[MAIN] Executing manual command: %d\r\n", p.command_id);
     switch (p.command_id) {
-      case 1: moveForwardOneCell(); break;
-      case 2: moveBackwardOneCell(); break;
+      case 1: moveForwardOneCell(); cells_driven++; break;
+      case 2: moveBackwardOneCell(); cells_driven++; break;
       case 3: turnLeft90(); break;
       case 4: turnRight90(); break;
       case 5: turnLeft45(); break;
@@ -166,20 +168,24 @@ void loop() {
     if (!wLeft) {
       turnLeft90();
       moveForwardOneCell();
+      cells_driven++;
     }
     // 2. Else if there is no wall in front, step forward
     else if (!wFront) {
       moveForwardOneCell();
+      cells_driven++;
     }
     // 3. Else if there is no wall on the right, turn right and step forward
     else if (!wRight) {
       turnRight90();
       moveForwardOneCell();
+      cells_driven++;
     }
     // 4. Dead end: Turn around and step forward
     else {
       turnAround180();
       moveForwardOneCell();
+      cells_driven++;
     }
   }
 

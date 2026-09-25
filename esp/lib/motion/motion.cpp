@@ -37,7 +37,8 @@ void moveForwardOneCell() {
         
         int32_t left = getLeftEncCount() * p.enc_L_direction;
         int32_t right = getRightEncCount() * p.enc_R_direction;
-        currentTicks = (left + right) / 2;
+        // Use absolute values so backward-wired encoders don't break the target logic
+        currentTicks = (abs(left) + abs(right)) / 2;
         
         // Use sensor readings for wall following
         readSensors();

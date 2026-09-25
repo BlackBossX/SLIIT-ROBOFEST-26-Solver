@@ -8,10 +8,10 @@
 //
 //  6 sensors in order: Right-to-Left
 //    [0] 90R  — 90° Right  (side-right)
-//    [1] 45R  — 45° Right  (diagonal-right)
-//    [2]  0R  — 0° Right   (front-right)
-//    [3]  0L  — 0° Left    (front-left)
-//    [4] 45L  — 45° Left   (diagonal-left)
+//    [1]  0R  — 0° Right   (front-right)
+//    [2] 45R  — 45° Right  (diagonal-right)
+//    [3] 45L  — 45° Left   (diagonal-left)
+//    [4]  0L  — 0° Left    (front-left)
 //    [5] 90L  — 90° Left   (side-left)
 //
 //  XSHUT pins (used to boot sensors one at a time and assign
@@ -20,7 +20,7 @@
 #define NUM_SENSORS      6
 
 // XSHUT pin for each sensor (index matches above order)
-// Right to Left: 90R, 45R, 0R, 0L, 45L, 90L
+// Right to Left: 90R, 0R, 45R, 45L, 0L, 90L
 const uint8_t XSHUT_PINS[NUM_SENSORS] = {13, 14, 25, 26, 27, 32};
 
 // Unique I²C addresses assigned at runtime
@@ -41,10 +41,10 @@ const uint8_t SENSOR_ADDRS[NUM_SENSORS] = {0x30, 0x31, 0x32, 0x33, 0x34, 0x35};
 //  Named indices for easy access
 // =========================================================
 #define SENSOR_90R   0
-#define SENSOR_45R   1
-#define SENSOR_0R    2   // Front-right
-#define SENSOR_0L    3   // Front-left
-#define SENSOR_45L   4
+#define SENSOR_0R    1   // Front-right
+#define SENSOR_45R   2
+#define SENSOR_45L   3
+#define SENSOR_0L    4   // Front-left
 #define SENSOR_90L   5
 
 // =========================================================

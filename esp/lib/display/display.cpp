@@ -44,7 +44,7 @@ void Display_Message(const char* msg) {
 
 void Display_Telemetry(uint16_t rawL, uint16_t rawF, uint16_t rawR, 
                        bool wL, bool wF, bool wR, 
-                       float gyro, int32_t encL, int32_t encR) {
+                       float gyro, int32_t encL, int32_t encR, uint16_t cells) {
     display.clearDisplay();
     
     // --- Graphical Top-Down View ---
@@ -66,9 +66,11 @@ void Display_Telemetry(uint16_t rawL, uint16_t rawF, uint16_t rawR,
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
     
-    // Front distance (Top center)
-    display.setCursor(cx - 12, 0);
+    // Front distance and Cells (Top center)
+    display.setCursor(cx - 16, 0);
     display.print(rawF == 9999 ? "---" : String(rawF));
+    display.print(" | C:");
+    display.print(cells);
     
     // Left distance (Left side)
     display.setCursor(0, cy - 4);
@@ -108,8 +110,9 @@ void Update_UI(void) {
                   sensorMM[SENSOR_0L], sensorMM[SENSOR_45L], sensorMM[SENSOR_90L],
                   (long)leftTicks, (long)rightTicks, gyroZ);
 
+    extern uint16_t cells_driven;
     // Display
     uint16_t frontAvg = (sensorMM[SENSOR_0L] == 9999 || sensorMM[SENSOR_0R] == 9999) ? 9999 : (sensorMM[SENSOR_0L] + sensorMM[SENSOR_0R]) / 2;
     Display_Telemetry(sensorMM[SENSOR_90L], frontAvg, sensorMM[SENSOR_90R],
-                      wLeft, wFront, wRight, gyroZ, leftTicks, rightTicks);
+                      wLeft, wFront, wRight, gyroZ, leftTicks, rightTicks, cells_driven);
 }
