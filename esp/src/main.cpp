@@ -22,6 +22,7 @@
 #include "pwm.h"
 #include "encoder.h"
 #include "comms.h"
+#include "gyro.h"
 
 // Built-in LED (GPIO2) — used for status indication
 #define PIN_STATUS_LED   2
@@ -47,6 +48,11 @@ void setup() {
     // VL53L0X ToF sensors
     if (!Sensor_Configuration()) {
         Serial.println("[BOOT] WARNING: One or more sensors failed — check wiring!");
+    }
+
+    // MPU6050 Gyro (Must be initialized AFTER Sensor_Configuration because it relies on Wire.begin())
+    if (!Gyro_Init()) {
+        Serial.println("[BOOT] WARNING: Gyro failed to initialize!");
     }
 
     // ESP-NOW comms (Ground Station receiver)
@@ -81,10 +87,13 @@ void loop() {
     int32_t leftTicks  = getLeftEncCount()  * p.enc_L_direction;
     int32_t rightTicks = getRightEncCount() * p.enc_R_direction;
 
+    // ---- Gyro reading ----
+    float gyroZ = getGyroZ();
+
     // ---- Print telemetry ----
     Serial.printf(
         "[TEL] 90R=%4d 45R=%4d 0R=%4d 0L=%4d 45L=%4d 90L=%4d  "
-        "encL=%6ld encR=%6ld\r\n",
+        "encL=%6ld encR=%6ld  GyroZ=%6.1f\r\n",
         sensorMM[SENSOR_90R],
         sensorMM[SENSOR_45R],
         sensorMM[SENSOR_0R],
@@ -92,7 +101,8 @@ void loop() {
         sensorMM[SENSOR_45L],
         sensorMM[SENSOR_90L],
         (long)leftTicks,
-        (long)rightTicks
+        (long)rightTicks,
+        gyroZ
     );
 
     // ---- Wall detection example ----
