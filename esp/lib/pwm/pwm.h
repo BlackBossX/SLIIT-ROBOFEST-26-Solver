@@ -2,36 +2,53 @@
 #include <Arduino.h>
 
 // =========================================================
-//  Motor PWM Pin Assignments   (adjust to match your wiring)
-//  Each motor needs two pins: Forward and Reverse.
-//  On an H-bridge like L298N or DRV8833 these map to IN1/IN2.
+//  TB6612FNG Dual H-Bridge Motor Driver
+//
+//  Motor A = Left Motor
+//    PWMA  → GPIO23  (PWM speed control)
+//    AIN1  → GPIO18  (direction bit 1)
+//    AIN2  → GPIO19  (direction bit 2)
+//
+//  Motor B = Right Motor
+//    PWMB  → GPIO17  (PWM speed control)
+//    BIN1  → GPIO4   (direction bit 1)
+//    BIN2  → GPIO16  (direction bit 2)
+//
+//  TB6612FNG truth table:
+//    AIN1=H, AIN2=L  → Forward
+//    AIN1=L, AIN2=H  → Reverse
+//    AIN1=L, AIN2=L  → Short-brake (fast stop)
+//    AIN1=H, AIN2=H  → Short-brake (fast stop)
 // =========================================================
-#define PIN_L_PWM_F   25   // Left  motor forward
-#define PIN_L_PWM_R   26   // Left  motor reverse
-#define PIN_R_PWM_F   27   // Right motor forward
-#define PIN_R_PWM_R   14   // Right motor reverse
+
+// Pin assignments
+#define PIN_PWMA   23
+#define PIN_AIN1   18
+#define PIN_AIN2   19
+#define PIN_PWMB   17
+#define PIN_BIN1    4
+#define PIN_BIN2   16
+
+// LEDC channels (ESP32 hardware PWM)
+#define LEDC_CH_PWMA   0
+#define LEDC_CH_PWMB   1
 
 // =========================================================
-//  LEDC channel assignments  (ESP32 has 16 channels, 0-15)
+//  Tunable PWM parameters
 // =========================================================
-#define LEDC_CH_L_F   0
-#define LEDC_CH_L_R   1
-#define LEDC_CH_R_F   2
-#define LEDC_CH_R_R   3
-
-// =========================================================
-//  PWM settings — mirrors the original STM32 21 KHz setup
-//  Resolution: 10-bit (0-1023) ≈ original 0-999 range
-// =========================================================
-#define MOTOR_PWM_FREQ  21000   // 21 KHz, same as original
-#define MOTOR_PWM_RES   10      // 10-bit resolution (0-1023)
-#define MOTOR_PWM_MAX   999     // Maximum input value (match original)
+#define MOTOR_PWM_FREQ   21000   // 21 kHz (inaudible switching frequency)
+#define MOTOR_PWM_RES    10      // 10-bit resolution → 0–1023
+#define MOTOR_PWM_MAX    1023    // Maximum duty cycle value
 
 // =========================================================
 //  Function prototypes
 // =========================================================
-void     Motor_Init(void);
-void     setLeftPwm(int32_t speed);
-void     setRightPwm(int32_t speed);
+void    Motor_Init(void);
 
-#define  turnMotorOff   { setLeftPwm(0); setRightPwm(0); }
+// speed range: -MOTOR_PWM_MAX … +MOTOR_PWM_MAX
+// Positive = forward, Negative = reverse, 0 = brake
+void    setLeftPwm(int32_t speed);
+void    setRightPwm(int32_t speed);
+
+// Convenience macro — hard-brake both motors
+#define turnMotorOff() { setLeftPwm(0); setRightPwm(0); }

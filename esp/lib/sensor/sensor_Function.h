@@ -1,54 +1,63 @@
 #pragma once
 #include <Arduino.h>
+#include <Wire.h>
+#include <VL53L0X.h>
 
 // =========================================================
-//  ADC Pin Assignments for IR sensors and voltage monitor.
+//  VL53L0X ToF Sensor Configuration
 //
-//  IMPORTANT: On ESP32, GPIO 34/35/36/39 are INPUT-ONLY
-//  and ideal for ADC use (no internal pull-ups/pull-downs).
+//  6 sensors in order: Right-to-Left
+//    [0] 90R  — 90° Right  (side-right)
+//    [1] 45R  — 45° Right  (diagonal-right)
+//    [2]  0R  — 0° Right   (front-right)
+//    [3]  0L  — 0° Left    (front-left)
+//    [4] 45L  — 45° Left   (diagonal-left)
+//    [5] 90L  — 90° Left   (side-left)
 //
-//  GPIO 34 = ADC1_CH6
-//  GPIO 35 = ADC1_CH7
-//  GPIO 36 = ADC1_CH0 (VP)
-//  GPIO 39 = ADC1_CH3 (VN)
-//
-//  Adjust these pins to match your actual wiring.
+//  XSHUT pins (used to boot sensors one at a time and assign
+//  unique I²C addresses):
 // =========================================================
-#define PIN_LF_SENSOR   34   // Left  Front IR sensor (ADC)
-#define PIN_RF_SENSOR   35   // Right Front IR sensor (ADC)
-#define PIN_DL_SENSOR   36   // Diagonal Left  IR sensor (ADC)
-#define PIN_DR_SENSOR   39   // Diagonal Right IR sensor (ADC)
-#define PIN_GYRO_Z      15   // Gyroscope Z-axis analog output (ADC2_CH3)
-#define PIN_VOL_METER   12   // Battery voltage divider (ADC2_CH5)
+#define NUM_SENSORS      6
+
+// XSHUT pin for each sensor (index matches above order)
+// Right to Left: 90R, 45R, 0R, 0L, 45L, 90L
+const uint8_t XSHUT_PINS[NUM_SENSORS] = {13, 14, 25, 26, 27, 32};
+
+// Unique I²C addresses assigned at runtime
+const uint8_t SENSOR_ADDRS[NUM_SENSORS] = {0x30, 0x31, 0x32, 0x33, 0x34, 0x35};
+
+// I²C bus pins
+#define SENSOR_SDA_PIN   21
+#define SENSOR_SCL_PIN   22
 
 // =========================================================
-//  ADC read macros — replace the original STM32 readADC macros
+//  Tunable: sensor reading timeout / invalid value
 // =========================================================
-#define read_LF_Sensor   analogRead(PIN_LF_SENSOR)
-#define read_RF_Sensor   analogRead(PIN_RF_SENSOR)
-#define read_DL_Sensor   analogRead(PIN_DL_SENSOR)
-#define read_DR_Sensor   analogRead(PIN_DR_SENSOR)
-#define read_Outz        analogRead(PIN_GYRO_Z)
-#define read_Vol_Meter   analogRead(PIN_VOL_METER)
+#define SENSOR_TIMEOUT_MS    30    // Per-sensor ranging timeout (ms)
+#define SENSOR_MAX_MM       1200   // Readings above this are treated as "open" (mm)
+#define SENSOR_INVALID       9999  // Value reported when sensor returns error/timeout
 
 // =========================================================
-//  Sensor value globals — extern declarations
+//  Named indices for easy access
 // =========================================================
-extern int     reflectionRate;
-extern int32_t volMeter;
-extern int32_t voltage;
-extern int32_t LFSensor;
-extern int32_t RFSensor;
-extern int32_t DLSensor;
-extern int32_t DRSensor;
-extern int32_t aSpeed;
-extern int32_t angle;
+#define SENSOR_90R   0
+#define SENSOR_45R   1
+#define SENSOR_0R    2   // Front-right
+#define SENSOR_0L    3   // Front-left
+#define SENSOR_45L   4
+#define SENSOR_90L   5
+
+// =========================================================
+//  Global sensor readings (mm). Updated by readSensors().
+// =========================================================
+extern uint16_t sensorMM[NUM_SENSORS];
 
 // =========================================================
 //  Function prototypes
 // =========================================================
-void readSensor(void);
-void readGyro(void);
-void readVolMeter(void);
-void lowBatCheck(void);
-void sensor_Configuration(void);
+bool    Sensor_Configuration(void);         // Call once in setup()
+void    readSensors(void);                  // Read all 6 sensors
+uint16_t getSensor(uint8_t idx);            // Get reading by index
+bool    isWallFront(uint16_t threshold_mm); // True if wall detected ahead
+bool    isWallRight(uint16_t threshold_mm); // True if wall detected on right
+bool    isWallLeft(uint16_t threshold_mm);  // True if wall detected on left

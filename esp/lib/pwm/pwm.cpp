@@ -1,61 +1,76 @@
 #include "pwm.h"
 
 // =========================================================
-//  Motor_Init — sets up 4 LEDC channels for motor control
-//  Replaces TIM4_PWM_Init() from the original STM32 code
+//  Motor_Init — configure TB6612FNG direction pins and
+//  LEDC channels for PWM speed control.
+//  Call once in setup() before using setLeftPwm/setRightPwm.
 // =========================================================
 void Motor_Init(void) {
-    // Configure each LEDC channel with the same frequency/resolution
-    ledcSetup(LEDC_CH_L_F, MOTOR_PWM_FREQ, MOTOR_PWM_RES);
-    ledcSetup(LEDC_CH_L_R, MOTOR_PWM_FREQ, MOTOR_PWM_RES);
-    ledcSetup(LEDC_CH_R_F, MOTOR_PWM_FREQ, MOTOR_PWM_RES);
-    ledcSetup(LEDC_CH_R_R, MOTOR_PWM_FREQ, MOTOR_PWM_RES);
+    // Direction GPIO pins — digital outputs
+    pinMode(PIN_AIN1, OUTPUT);
+    pinMode(PIN_AIN2, OUTPUT);
+    pinMode(PIN_BIN1, OUTPUT);
+    pinMode(PIN_BIN2, OUTPUT);
 
-    // Attach channels to physical GPIO pins
-    ledcAttachPin(PIN_L_PWM_F, LEDC_CH_L_F);
-    ledcAttachPin(PIN_L_PWM_R, LEDC_CH_L_R);
-    ledcAttachPin(PIN_R_PWM_F, LEDC_CH_R_F);
-    ledcAttachPin(PIN_R_PWM_R, LEDC_CH_R_R);
+    // PWM channels via LEDC (Motor A and Motor B speed pins)
+    ledcSetup(LEDC_CH_PWMA, MOTOR_PWM_FREQ, MOTOR_PWM_RES);
+    ledcSetup(LEDC_CH_PWMB, MOTOR_PWM_FREQ, MOTOR_PWM_RES);
+    ledcAttachPin(PIN_PWMA, LEDC_CH_PWMA);
+    ledcAttachPin(PIN_PWMB, LEDC_CH_PWMB);
 
-    // Start with motors stopped
-    ledcWrite(LEDC_CH_L_F, 0);
-    ledcWrite(LEDC_CH_L_R, 0);
-    ledcWrite(LEDC_CH_R_F, 0);
-    ledcWrite(LEDC_CH_R_R, 0);
+    // Start with motors braked (all direction pins LOW, PWM=0)
+    setLeftPwm(0);
+    setRightPwm(0);
+
+    Serial.println("[PWM] TB6612FNG motors initialized");
 }
 
 // =========================================================
-//  setLeftPwm — drives the left motor at a given speed
-//  speed > 0 : forward
-//  speed < 0 : reverse
-//  range: -999 to +999  (same as original)
+//  setLeftPwm — Motor A (Left motor)
+//
+//  TB6612FNG direction control:
+//    Forward : AIN1=HIGH, AIN2=LOW,  PWMA = |speed|
+//    Reverse : AIN1=LOW,  AIN2=HIGH, PWMA = |speed|
+//    Brake   : AIN1=LOW,  AIN2=LOW,  PWMA = 0
 // =========================================================
 void setLeftPwm(int32_t speed) {
-    // Clamp input to valid range
+    // Clamp to valid range
     if (speed >  MOTOR_PWM_MAX) speed =  MOTOR_PWM_MAX;
     if (speed < -MOTOR_PWM_MAX) speed = -MOTOR_PWM_MAX;
 
-    if (speed >= 0) {       // Forward
-        ledcWrite(LEDC_CH_L_F, (uint32_t)speed);
-        ledcWrite(LEDC_CH_L_R, 0);
-    } else {                // Reverse
-        ledcWrite(LEDC_CH_L_F, 0);
-        ledcWrite(LEDC_CH_L_R, (uint32_t)(-speed));
+    if (speed > 0) {                     // Forward
+        digitalWrite(PIN_AIN1, HIGH);
+        digitalWrite(PIN_AIN2, LOW);
+        ledcWrite(LEDC_CH_PWMA, (uint32_t)speed);
+    } else if (speed < 0) {              // Reverse
+        digitalWrite(PIN_AIN1, LOW);
+        digitalWrite(PIN_AIN2, HIGH);
+        ledcWrite(LEDC_CH_PWMA, (uint32_t)(-speed));
+    } else {                             // Brake (short-brake)
+        digitalWrite(PIN_AIN1, LOW);
+        digitalWrite(PIN_AIN2, LOW);
+        ledcWrite(LEDC_CH_PWMA, 0);
     }
 }
 
 // =========================================================
-//  setRightPwm — drives the right motor at a given speed
+//  setRightPwm — Motor B (Right motor)
 // =========================================================
 void setRightPwm(int32_t speed) {
     if (speed >  MOTOR_PWM_MAX) speed =  MOTOR_PWM_MAX;
     if (speed < -MOTOR_PWM_MAX) speed = -MOTOR_PWM_MAX;
 
-    if (speed >= 0) {       // Forward
-        ledcWrite(LEDC_CH_R_F, (uint32_t)speed);
-        ledcWrite(LEDC_CH_R_R, 0);
-    } else {                // Reverse
-        ledcWrite(LEDC_CH_R_F, 0);
-        ledcWrite(LEDC_CH_R_R, (uint32_t)(-speed));
+    if (speed > 0) {                     // Forward
+        digitalWrite(PIN_BIN1, HIGH);
+        digitalWrite(PIN_BIN2, LOW);
+        ledcWrite(LEDC_CH_PWMB, (uint32_t)speed);
+    } else if (speed < 0) {              // Reverse
+        digitalWrite(PIN_BIN1, LOW);
+        digitalWrite(PIN_BIN2, HIGH);
+        ledcWrite(LEDC_CH_PWMB, (uint32_t)(-speed));
+    } else {                             // Brake (short-brake)
+        digitalWrite(PIN_BIN1, LOW);
+        digitalWrite(PIN_BIN2, LOW);
+        ledcWrite(LEDC_CH_PWMB, 0);
     }
 }

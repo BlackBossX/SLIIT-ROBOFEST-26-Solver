@@ -1,105 +1,113 @@
 /*
- * =================================================================
- *  Micromouse Sensor Test — ESP32 Port
- *  Original target : STM32F4 (Keil uVision)
- *  Ported target   : ESP32 (PlatformIO / Arduino framework)
- * =================================================================
+ * ================================================================
+ *  Micromouse — Main Robot Controller
+ *  Target  : ESP32 (PlatformIO / Arduino framework)
+ *  Hardware:
+ *    • 6× VL53L0X ToF sensors  (I²C, XSHUT pins 13/14/25/26/27/32)
+ *    • TB6612FNG dual H-bridge  (PWMA=23, AIN1=18, AIN2=19,
+ *                                PWMB=17, BIN1=4,  BIN2=16)
+ *    • Quadrature encoders      (Left:  PULSE=34, CTRL=36)
+ *                               (Right: PULSE=39, CTRL=35)
+ *    • ESP-NOW receiver         (Ground Station → RobotParams)
+ * ================================================================
  *
- *  To upload:   pio run --target upload
- *  To monitor:  pio device monitor       (or PlatformIO sidebar)
- *
- *  This file mirrors user/main.c from the original STM32 project.
- *  It initializes all peripherals and runs a sensor diagnostic loop.
- * =================================================================
+ *  Build : pio run
+ *  Upload: pio run --target upload
+ *  Monitor: pio device monitor
+ * ================================================================
  */
 
 #include <Arduino.h>
-
-// User libraries — all ported to Arduino/ESP32
-#include "led.h"
+#include "sensor_Function.h"
 #include "pwm.h"
 #include "encoder.h"
-#include "buzzer.h"
-#include "sensor_Function.h"
+#include "comms.h"
 
-// =========================================================
-//  1ms hardware timer for buzzerTick()
-//  Replaces SysTick_Handler from stm32f4xx_it.c
-// =========================================================
-hw_timer_t* g_timer = nullptr;
+// Built-in LED (GPIO2) — used for status indication
+#define PIN_STATUS_LED   2
 
-void IRAM_ATTR onTimer() {
-    buzzerTick();   // Decrement buzzerTime every 1ms to auto-shutoff
-}
-
-// =========================================================
+// ================================================================
 //  setup() — runs once at boot
-//  Mirrors the initialization block in the original main()
-// =========================================================
+// ================================================================
 void setup() {
-    // ----- Serial (replaces USART1 @ 9600) -----
-    // Using 115200 baud — much faster and standard for ESP32
     Serial.begin(115200);
-    delay(100);
-    Serial.println("\r\n===  Micromouse Sensor Test  (ESP32 Port)  ===");
+    delay(200);
+    Serial.println("\n=== Micromouse Boot ===");
 
-    // ----- LEDs and IR Emitters -----
-    LED_Configuration();
-    LED1_ON;   // Visual indicator: boot started
+    // Status LED
+    pinMode(PIN_STATUS_LED, OUTPUT);
+    digitalWrite(PIN_STATUS_LED, HIGH);   // On while initializing
 
-    // ----- Motor PWM (replaces TIM4_PWM_Init) -----
+    // Motor driver
     Motor_Init();
 
-    // ----- Quadrature Encoders (replaces Encoder_Configration) -----
+    // Quadrature encoders (raw PCNT)
     Encoder_Configuration();
 
-    // ----- Buzzer (replaces buzzer_Configuration) -----
-    buzzer_Configuration();
+    // VL53L0X ToF sensors
+    if (!Sensor_Configuration()) {
+        Serial.println("[BOOT] WARNING: One or more sensors failed — check wiring!");
+    }
 
-    // ----- ADC / Sensor setup -----
-    sensor_Configuration();
+    // ESP-NOW comms (Ground Station receiver)
+    Comms_Init();
 
-    // ----- 1ms hardware timer for buzzer auto-shutoff -----
-    g_timer = timerBegin(0, 80, true);          // Timer 0, 80MHz/80 = 1MHz tick
-    timerAttachInterrupt(g_timer, &onTimer, true);
-    timerAlarmWrite(g_timer, 1000, true);       // Alarm every 1000µs = 1ms
-    timerAlarmEnable(g_timer);
+    // Print MAC address so Ground Station can target this robot
+    Serial.println("[BOOT] Init complete. Robot ready.");
+    printParams();    // Show starting parameter values
 
-    // ----- Startup beep (replaces shortBeep(2000, 8000)) -----
-    shortBeep(200, 4000);   // 200ms beep at 4kHz
-    delay(300);
-
-    LED1_OFF;
-    Serial.println("Init complete. Starting sensor loop...\r\n");
+    digitalWrite(PIN_STATUS_LED, LOW);
 }
 
-// =========================================================
-//  loop() — runs repeatedly
-//  Mirrors the while(1) block in the original main()
-// =========================================================
+// ================================================================
+//  loop() — main control loop
+// ================================================================
 void loop() {
-    // Read all sensors (IR + gyro + voltage inside readSensor)
-    readSensor();
-    readGyro();
-    readVolMeter();
+    // ---- Pull latest tunable parameters ----
+    RobotParams& p = getParams();
 
-    // Print telemetry — same format as original printf() line
+    // ---- Check for Ground Station update ----
+    if (paramsUpdated()) {
+        Serial.println("[MAIN] Parameters updated:");
+        printParams();
+        // Re-apply any values that affect hardware directly
+        // (e.g., encoder direction, speed limits, etc.)
+    }
+
+    // ---- Read all 6 ToF sensors ----
+    readSensors();
+
+    // ---- Encoder counts ----
+    int32_t leftTicks  = getLeftEncCount()  * p.enc_L_direction;
+    int32_t rightTicks = getRightEncCount() * p.enc_R_direction;
+
+    // ---- Print telemetry ----
     Serial.printf(
-        "LF %d  RF %d  DL %d  DR %d  aSpeed %d  angle %d  voltage %d  lenc %d  renc %d\r\n",
-        (int)LFSensor,
-        (int)RFSensor,
-        (int)DLSensor,
-        (int)DRSensor,
-        (int)aSpeed,
-        (int)angle,
-        (int)voltage,
-        (int)getLeftEncCount(),
-        (int)getRightEncCount()
+        "[TEL] 90R=%4d 45R=%4d 0R=%4d 0L=%4d 45L=%4d 90L=%4d  "
+        "encL=%6ld encR=%6ld\r\n",
+        sensorMM[SENSOR_90R],
+        sensorMM[SENSOR_45R],
+        sensorMM[SENSOR_0R],
+        sensorMM[SENSOR_0L],
+        sensorMM[SENSOR_45L],
+        sensorMM[SENSOR_90L],
+        (long)leftTicks,
+        (long)rightTicks
     );
 
-    // Drive both motors forward at PWM = 100 (same as original test)
-    setLeftPwm(100);
-    setRightPwm(100);
+    // ---- Wall detection example ----
+    bool wFront = isWallFront(p.wall_front_thresh);
+    bool wRight = isWallRight(p.wall_side_thresh);
+    bool wLeft  = isWallLeft (p.wall_side_thresh);
+    Serial.printf("[WALLS] Front=%d Right=%d Left=%d\r\n",
+                  wFront, wRight, wLeft);
 
-    delay(1000);  // replaces delay_ms(1000)
+    // ---- TEST DRIVE: drive forward slowly then stop ----
+    // Remove / replace this block with your maze solver logic
+    setLeftPwm(p.speed_fwd);
+    setRightPwm(p.speed_fwd);
+    delay(500);
+    setLeftPwm(0);
+    setRightPwm(0);
+    delay(500);
 }
