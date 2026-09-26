@@ -62,6 +62,15 @@ struct RobotParams {
     // =====================================================
     uint8_t command_id;        // Used for manual remote control from GS
 
+    // =====================================================
+    //  Tuner / Hardware specifics
+    // =====================================================
+    float motor_l_trim;
+    float motor_r_trim;
+    float kp_bal;
+    uint16_t min_pwm;
+    uint8_t invert_flags;
+
 };  // sizeof(RobotParams) must be ≤ 250 bytes for ESP-NOW
 
 // Default values — applied at boot if no Ground Station
@@ -87,5 +96,12 @@ inline RobotParams defaultParams() {
     p.enc_R_direction   = 1;
     p.sensor_read_us    = 20;
     p.command_id        = 0;
+    
+    p.motor_l_trim      = 1.17f;
+    p.motor_r_trim      = 1.0f;
+    p.kp_bal            = 1.42f;
+    p.min_pwm           = 0;
+    p.invert_flags      = 0x00;
+    
     return p;
 }

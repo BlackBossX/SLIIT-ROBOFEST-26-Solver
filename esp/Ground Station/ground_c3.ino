@@ -165,6 +165,15 @@ const char HTML_PAGE[] PROGMEM = R"rawhtml(
   </div>
 
   <div class="card">
+    <h2>Hardware Tuner</h2>
+    <div class="row"><label>Motor L Trim</label>  <input type="number" id="motor_l_trim" step="0.01" value="1.17"></div>
+    <div class="row"><label>Motor R Trim</label>  <input type="number" id="motor_r_trim" step="0.01" value="1.00"></div>
+    <div class="row"><label>Encoder kp_bal</label><input type="number" id="kp_bal" step="0.01" value="1.42"></div>
+    <div class="row"><label>Min PWM</label>       <input type="number" id="min_pwm" min="0" max="1023" value="0"></div>
+    <div class="row"><label>Invert Flags</label>  <input type="number" id="invert_flags" min="0" max="255" value="0"></div>
+  </div>
+
+  <div class="card">
     <h2>Manual Commands</h2>
     <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px">
       <button class="cmd-btn" type="button" onclick="sendCommand(9)" style="border-color:var(--green);color:var(--green)">▶ Start Auto</button>
@@ -195,7 +204,8 @@ const defaults = {
   speed_fwd:400, speed_turn:350, speed_slow:200,
   cell_size_mm:180, fwd_ticks:400, turn_ticks:220,
   wall_front_thresh:80, wall_side_thresh:90, wall_diag_thresh:120,
-  enc_L_direction:1, enc_R_direction:1, sensor_read_us:20
+  enc_L_direction:1, enc_R_direction:1, sensor_read_us:20,
+  motor_l_trim:1.17, motor_r_trim:1.0, kp_bal:1.42, min_pwm:0, invert_flags:0
 };
 
 function resetDefaults(){
@@ -235,7 +245,8 @@ async function sendParams(){
     'speed_fwd','speed_turn','speed_slow',
     'cell_size_mm','fwd_ticks','turn_ticks',
     'wall_front_thresh','wall_side_thresh','wall_diag_thresh',
-    'enc_L_direction','enc_R_direction','sensor_read_us'
+    'enc_L_direction','enc_R_direction','sensor_read_us',
+    'motor_l_trim','motor_r_trim','kp_bal','min_pwm','invert_flags'
   ];
   const params={};
   for(const id of ids){
@@ -302,6 +313,11 @@ void handleSend() {
     currentParams.enc_L_direction   = doc["enc_L_direction"]   | currentParams.enc_L_direction;
     currentParams.enc_R_direction   = doc["enc_R_direction"]   | currentParams.enc_R_direction;
     currentParams.sensor_read_us    = doc["sensor_read_us"]    | currentParams.sensor_read_us;
+    currentParams.motor_l_trim      = doc["motor_l_trim"]      | currentParams.motor_l_trim;
+    currentParams.motor_r_trim      = doc["motor_r_trim"]      | currentParams.motor_r_trim;
+    currentParams.kp_bal            = doc["kp_bal"]            | currentParams.kp_bal;
+    currentParams.min_pwm           = doc["min_pwm"]           | currentParams.min_pwm;
+    currentParams.invert_flags      = doc["invert_flags"]      | currentParams.invert_flags;
     currentParams.command_id        = doc["command_id"]        | 0;
 
     sendParams();

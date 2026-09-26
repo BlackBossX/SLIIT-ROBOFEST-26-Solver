@@ -1,3 +1,18 @@
+/*
+ * ================================================================
+ *  motion.cpp — Robot movement primitives
+ *
+ *  All motor output goes through setMotorsRaw() which applies:
+ *    1. Software motor-swap  (invert_flags bit 4)
+ *    2. Left / right trim    (motor_l_trim, motor_r_trim)
+ *    3. Per-motor inversion  (invert_flags bit 0/1)
+ *    4. Deadband mapping     (min_pwm)
+ *
+ *  Positive speed = forward for both motors.
+ *  Turn convention: positive angle = Left, negative angle = Right.
+ * ================================================================
+ */
+
 #include "motion.h"
 #include "../encoder/encoder.h"
 #include "../pwm/pwm.h"
@@ -6,144 +21,193 @@
 #include "../comms/comms.h"
 #include "../display/display.h"
 
+// ================================================================
+//  setMotorsRaw — single motor-output gateway
+//  All flags and trims applied here. Never call setLeftPwm /
+//  setRightPwm directly from movement code.
+// ================================================================
+static void setMotorsRaw(int32_t speedL, int32_t speedR) {
+    RobotParams& p = getParams();
+
+    // 1. Software swap (bit 4)
+    if (p.invert_flags & 0x10) {
+        int32_t tmp = speedL; speedL = speedR; speedR = tmp;
+    }
+
+    // 2. Per-motor trim
+    speedL = (int32_t)(speedL * p.motor_l_trim);
+    speedR = (int32_t)(speedR * p.motor_r_trim);
+
+    // 3. Per-motor inversion (bit 0 = left, bit 1 = right)
+    if (p.invert_flags & 0x01) speedL = -speedL;
+    if (p.invert_flags & 0x02) speedR = -speedR;
+
+    // 4. Deadband: map 1..1023 → min_pwm..1023
+    auto applyDeadband = [&](int32_t s) -> int32_t {
+        if (s == 0 || p.min_pwm == 0) return s;
+        int sgn = (s > 0) ? 1 : -1;
+        int mag = map(abs((int)s), 1, 1023, p.min_pwm, 1023);
+        return sgn * constrain(mag, (int)p.min_pwm, 1023);
+    };
+    speedL = applyDeadband(speedL);
+    speedR = applyDeadband(speedR);
+
+    setLeftPwm(speedL);
+    setRightPwm(speedR);
+}
+
+// ================================================================
+//  stopMotors
+// ================================================================
 void stopMotors() {
     setLeftPwm(0);
     setRightPwm(0);
-    delay(200); // Wait for robot to settle
+    delay(150);
 }
 
+// ================================================================
+//  moveForwardOneCell
+//  Drives exactly p.fwd_ticks encoder ticks using:
+//    • Encoder balance PID (straight assist)
+//    • Wall-following correction layered on top
+// ================================================================
 void moveForwardOneCell() {
     RobotParams& p = getParams();
-    
-    // Reset encoders to start fresh for this cell
+
     resetLeftEncCount();
     resetRightEncCount();
 
-    int32_t targetTicks = p.fwd_ticks;
-    int32_t currentTicks = 0;
-    
-    unsigned long startTime = millis();
-    unsigned long last_ui_update = millis();
+    const int32_t  targetTicks   = p.fwd_ticks;
+    int32_t        currentTicks  = 0;
+    unsigned long  startTime     = millis();
+    unsigned long  last_ui       = millis();
 
-    // Drive until the average encoder count reaches the target
-    // Added a 3-second timeout in case encoders are disconnected or robot is stuck
     while (currentTicks < targetTicks && (millis() - startTime) < 3000) {
-        if (millis() - last_ui_update > 50) {
-            Update_UI();
-            last_ui_update = millis();
-        }
+
+        // UI refresh (50 ms)
+        if (millis() - last_ui > 50) { Update_UI(); last_ui = millis(); }
 
         updateEncoders();
-        
-        int32_t left = getLeftEncCount() * p.enc_L_direction;
-        int32_t right = getRightEncCount() * p.enc_R_direction;
-        // Use absolute values so backward-wired encoders don't break the target logic
-        currentTicks = (abs(left) + abs(right)) / 2;
-        
-        // Use sensor readings for wall following
+        int32_t left  = abs(getLeftEncCount()  * p.enc_L_direction);
+        int32_t right = abs(getRightEncCount() * p.enc_R_direction);
+        currentTicks  = (left + right) / 2;
+
+        // --- Layer 1: Encoder balance (keeps both wheels at same tick count) ---
+        float correction = (float)(left - right) * p.kp_bal;
+
+        // --- Layer 2: Wall-following (blended on top of encoder balance) ---
         readSensors();
         bool wallL = isWallLeft(p.wall_side_thresh);
         bool wallR = isWallRight(p.wall_side_thresh);
-        
-        float correction = 0.0f; // 0 if no walls
-        
+
         if (wallL && wallR) {
-            // Both walls present: Keep centered between them
-            float wallError = (float)sensorMM[SENSOR_90L] - (float)sensorMM[SENSOR_90R];
-            correction -= wallError * p.pid_W_kp;
+            // Centered between both walls
+            float wallErr = (float)sensorMM[SENSOR_90L] - (float)sensorMM[SENSOR_90R];
+            correction += wallErr * p.pid_W_kp;
         } else if (wallL) {
-            // Only left wall: Follow left wall at a target distance of 45mm
-            float wallError = (float)sensorMM[SENSOR_90L] - 45.0f;
-            correction -= wallError * p.pid_W_kp;
+            // Hug left wall at 45 mm
+            float wallErr = (float)sensorMM[SENSOR_90L] - 45.0f;
+            correction += wallErr * p.pid_W_kp;
         } else if (wallR) {
-            // Only right wall: Follow right wall at a target distance of 45mm
-            float wallError = 45.0f - (float)sensorMM[SENSOR_90R];
-            correction -= wallError * p.pid_W_kp;
+            // Hug right wall at 45 mm
+            float wallErr = 45.0f - (float)sensorMM[SENSOR_90R];
+            correction -= wallErr * p.pid_W_kp;
         }
-        
-        // Apply correction to base forward speed
-        int16_t pwm_l = p.speed_fwd - (int16_t)correction;
-        int16_t pwm_r = p.speed_fwd + (int16_t)correction;
-        
-        // Constrain PWM to safe bounds
-        if (pwm_l > 1023) pwm_l = 1023;
-        if (pwm_r > 1023) pwm_r = 1023;
-        if (pwm_l < 0) pwm_l = 0;
-        if (pwm_r < 0) pwm_r = 0;
-        
-        setLeftPwm(pwm_l);
-        setRightPwm(pwm_r);
+
+        // Positive correction → speed left motor up, slow right motor down
+        int16_t pwm_l = constrain((int)(p.speed_fwd + correction), 0, 1023);
+        int16_t pwm_r = constrain((int)(p.speed_fwd - correction), 0, 1023);
+
+        setMotorsRaw(pwm_l, pwm_r);
         delay(5);
     }
     stopMotors();
 }
 
-// Helper to turn using Gyro integration
+// ================================================================
+//  moveBackwardOneCell — encoder-assisted straight reverse
+// ================================================================
+void moveBackwardOneCell() {
+    RobotParams& p = getParams();
+
+    resetLeftEncCount();
+    resetRightEncCount();
+
+    const int32_t  targetTicks  = p.fwd_ticks;
+    int32_t        currentTicks = 0;
+    unsigned long  startTime    = millis();
+    unsigned long  last_ui      = millis();
+
+    while (currentTicks < targetTicks && (millis() - startTime) < 3000) {
+
+        if (millis() - last_ui > 50) { Update_UI(); last_ui = millis(); }
+
+        updateEncoders();
+        int32_t left  = abs(getLeftEncCount()  * p.enc_L_direction);
+        int32_t right = abs(getRightEncCount() * p.enc_R_direction);
+        currentTicks  = (left + right) / 2;
+
+        // Encoder balance (same sign convention, but applied to -speed)
+        float correction = (float)(left - right) * p.kp_bal;
+
+        int16_t pwm_l = constrain((int)(p.speed_fwd + correction), 0, 1023);
+        int16_t pwm_r = constrain((int)(p.speed_fwd - correction), 0, 1023);
+
+        // Reverse direction
+        setMotorsRaw(-pwm_l, -pwm_r);
+        delay(5);
+    }
+    stopMotors();
+}
+
+// ================================================================
+//  turnByAngle — gyro-integrated spot turn
+//
+//  Convention (before invert_flags):
+//    targetAngleDeg > 0 → robot turns LEFT  (L backward, R forward)
+//    targetAngleDeg < 0 → robot turns RIGHT (L forward,  R backward)
+//
+//  If the physical robot turns the wrong way, use invert_flags bit 0
+//  or bit 1 from the Ground Station to flip the offending motor.
+// ================================================================
 static void turnByAngle(float targetAngleDeg) {
     RobotParams& p = getParams();
-    float currentAngle = 0.0;
-    unsigned long lastTime = micros();
-    
-    // Determine direction
-    int16_t turnSpeed = p.speed_turn;
-    if (targetAngleDeg < 0) {
-        // Turn Right (Physically inverted motors)
-        setLeftPwm(-turnSpeed);
-        setRightPwm(turnSpeed);
-    } else {
-        // Turn Left (Physically inverted motors)
-        setLeftPwm(turnSpeed);
-        setRightPwm(-turnSpeed);
-    }
-    
-    unsigned long startTime = millis();
-    unsigned long last_ui_update = millis();
 
-    // Integrate gyro Z over time until we reach the target angle
-    // Added a 2-second timeout in case the robot is stuck or held in the air
+    float         currentAngle = 0.0f;
+    unsigned long lastTimeMicros = micros();
+    unsigned long startTime    = millis();
+    unsigned long last_ui      = millis();
+
+    int16_t spd = p.speed_turn;
+
+    // Standard turn command — setMotorsRaw applies all inversions
+    if (targetAngleDeg > 0.0f) {
+        // Turn Left: right wheel drives forward, left wheel drives backward
+        setMotorsRaw(-spd, spd);
+    } else {
+        // Turn Right: left wheel drives forward, right wheel drives backward
+        setMotorsRaw(spd, -spd);
+    }
+
     while (abs(currentAngle) < abs(targetAngleDeg) && (millis() - startTime) < 2000) {
-        if (millis() - last_ui_update > 50) {
-            Update_UI();
-            last_ui_update = millis();
-        }
+
+        if (millis() - last_ui > 50) { Update_UI(); last_ui = millis(); }
 
         unsigned long now = micros();
-        float dt = (now - lastTime) / 1000000.0f;
-        lastTime = now;
-        
-        float gz = getGyroZ();
-        currentAngle += gz * dt;
-        
+        float dt = (now - lastTimeMicros) / 1000000.0f;
+        lastTimeMicros = now;
+
+        currentAngle += getGyroZ() * dt;   // degrees
         delay(2);
     }
     stopMotors();
 }
 
-void turnLeft90() {
-    // Usually a little less than 90 to account for momentum/overshoot
-    turnByAngle(85.0); 
-}
-
-void turnRight90() {
-    turnByAngle(-85.0);
-}
-
-void turnLeft45() {
-    turnByAngle(45.0);
-}
-
-void turnRight45() {
-    turnByAngle(-45.0);
-}
-
-void turnAround180() {
-    turnByAngle(175.0);
-}
-
-void moveBackwardOneCell() {
-    RobotParams& p = getParams();
-    setLeftPwm(-p.speed_fwd);
-    setRightPwm(-p.speed_fwd);
-    delay(500); // Simple time-based reverse
-    stopMotors();
-}
+// ================================================================
+//  Public turn wrappers
+// ================================================================
+void turnLeft90()    { turnByAngle( 85.0f); }
+void turnRight90()   { turnByAngle(-85.0f); }
+void turnLeft45()    { turnByAngle( 45.0f); }
+void turnRight45()   { turnByAngle(-45.0f); }
+void turnAround180() { turnByAngle(175.0f); }
